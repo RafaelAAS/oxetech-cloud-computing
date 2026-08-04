@@ -49,11 +49,14 @@ jobs:
           chmod 600 nordmart_key
           ssh-keygen -y -f nordmart_key > nordmart_key.pub
       
-      - name: Atualizar chave GPG HashiCorp
+      - name: Instalar provider azurerm manualmente
         run: |
-          sudo apt-get install -y gnupg
-          curl -fsSL https://keybase.io/hashicorp/pgp_keys.asc | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          PROVIDER_VERSION="3.116.0"
+          PROVIDER_DIR="terraform/.terraform/providers/registry.terraform.io/hashicorp/azurerm/${PROVIDER_VERSION}/linux_amd64"
+          mkdir -p "$PROVIDER_DIR"
+          wget -q -O /tmp/provider.zip "https://releases.hashicorp.com/terraform-provider-azurerm/${PROVIDER_VERSION}/terraform-provider-azurerm_${PROVIDER_VERSION}_linux_amd64.zip"
+          unzip -o /tmp/provider.zip -d "$PROVIDER_DIR"
+          chmod +x "$PROVIDER_DIR"/terraform-provider-azurerm_*
 
       - name: Terraform Init
         working-directory: terraform
@@ -62,8 +65,7 @@ jobs:
           ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
           ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_SKIP_PROVIDER_VERIFY: "1"
-        run: terraform init -upgrade
+        run: terraform init -upgrade -plugin-dir=".terraform/providers"
 
       - name: Terraform Plan
         working-directory: terraform
