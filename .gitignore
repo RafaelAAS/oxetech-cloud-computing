@@ -224,6 +224,9 @@ terraform/.terraform.lock.hcl
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 
+terraform/nordmart_key
+terraform/nordmart_key.pub
+
 # Python
 venv/
 __pycache__/
