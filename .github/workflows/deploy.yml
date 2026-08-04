@@ -1,0 +1,151 @@
+name: NordMart Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # permite rodar manualmente pelo GitHub
+
+env:
+  TF_VERSION: "1.6.0"
+
+jobs:
+  # ── JOB 1: Infraestrutura com Terraform ──────────────────────
+  terraform:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+
+    outputs:
+      vm_a_ip: ${{ steps.outputs.outputs.vm_a_ip }}
+      vm_b_ip: ${{ steps.outputs.outputs.vm_b_ip }}
+      db_host: ${{ steps.outputs.outputs.db_host }}
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Criar arquivo de credenciais
+        working-directory: terraform
+        run: |
+          cat > terraform.tfvars << EOF
+          subscription_id   = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          client_id         = "${{ secrets.AZURE_CLIENT_ID }}"
+          client_secret     = "${{ secrets.AZURE_CLIENT_SECRET }}"
+          tenant_id         = "${{ secrets.AZURE_TENANT_ID }}"
+          db_admin_password = "${{ secrets.DB_PASS }}"
+          my_ip             = "0.0.0.0"
+          EOF
+
+      - name: Criar chave SSH pública
+        working-directory: terraform
+        run: |
+          echo "${{ secrets.VM_SSH_KEY }}" > nordmart_key
+          chmod 600 nordmart_key
+          ssh-keygen -y -f nordmart_key > nordmart_key.pub
+
+      - name: Terraform Init
+        working-directory: terraform
+        env:
+          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: terraform
+        env:
+          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: terraform
+        env:
+          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Capturar outputs do Terraform
+        id: outputs
+        working-directory: terraform
+        env:
+          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          echo "vm_a_ip=$(terraform output -raw vm_a_ip)" >> $GITHUB_OUTPUT
+          echo "vm_b_ip=$(terraform output -raw vm_b_ip)" >> $GITHUB_OUTPUT
+          echo "db_host=$(terraform output -raw database_host)" >> $GITHUB_OUTPUT
+
+  # ── JOB 2: Deploy da aplicação nas VMs ───────────────────────
+  deploy:
+    name: "Deploy Aplicação"
+    runs-on: ubuntu-latest
+    needs: terraform  # só roda depois do terraform terminar
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar chave SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/nordmart_key
+          chmod 600 ~/.ssh/nordmart_key
+          ssh-keyscan -H ${{ needs.terraform.outputs.vm_a_ip }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H ${{ needs.terraform.outputs.vm_b_ip }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy na VM web-a
+        env:
+          VM_IP:   ${{ needs.terraform.outputs.vm_a_ip }}
+          DB_HOST: ${{ needs.terraform.outputs.db_host }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+        run: |
+          # Copia os arquivos para a VM
+          scp -i ~/.ssh/nordmart_key -o StrictHostKeyChecking=no \
+            app/app.py app/requirements.txt app/deploy.sh \
+            nordadmin@$VM_IP:/tmp/
+
+          # Executa o deploy
+          ssh -i ~/.ssh/nordmart_key -o StrictHostKeyChecking=no \
+            nordadmin@$VM_IP \
+            "export DB_HOST='$DB_HOST' DB_NAME='nordmart' DB_USER='norddbadmin' DB_PASS='$DB_PASS' && \
+             chmod +x /tmp/deploy.sh && sudo -E /tmp/deploy.sh"
+
+      - name: Deploy na VM web-b
+        env:
+          VM_IP:   ${{ needs.terraform.outputs.vm_b_ip }}
+          DB_HOST: ${{ needs.terraform.outputs.db_host }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+        run: |
+          scp -i ~/.ssh/nordmart_key -o StrictHostKeyChecking=no \
+            app/app.py app/requirements.txt app/deploy.sh \
+            nordadmin@$VM_IP:/tmp/
+
+          ssh -i ~/.ssh/nordmart_key -o StrictHostKeyChecking=no \
+            nordadmin@$VM_IP \
+            "export DB_HOST='$DB_HOST' DB_NAME='nordmart' DB_USER='norddbadmin' DB_PASS='$DB_PASS' && \
+             chmod +x /tmp/deploy.sh && sudo -E /tmp/deploy.sh"
+
+      - name: Verificar aplicação
+        env:
+          LB_IP: ${{ needs.terraform.outputs.vm_a_ip }}
+        run: |
+          echo "Aguardando aplicação iniciar..."
+          sleep 30
+          curl -f http://${{ needs.terraform.outputs.vm_a_ip }}/health || echo "VM-a ainda iniciando"
+          curl -f http://${{ needs.terraform.outputs.vm_b_ip }}/health || echo "VM-b ainda iniciando"
+          echo "Deploy finalizado!"
+          echo "Acesse a aplicação em: http://${{ needs.terraform.outputs.vm_a_ip }}"
