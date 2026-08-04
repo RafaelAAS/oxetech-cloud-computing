@@ -12,7 +12,7 @@ env:
 jobs:
   terraform:
     name: "Terraform Apply"
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     outputs:
       vm_a_ip: ${{ steps.outputs.outputs.vm_a_ip }}
@@ -56,8 +56,12 @@ jobs:
           ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
           ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: terraform init
-        
+        run: |
+          sudo apt-get install -y gnupg2
+          gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 72D7468F
+          gpg --export 72D7468F | sudo tee /usr/share/keyrings/hashicorp.gpg > /dev/null
+          GNUPGHOME=/usr/share/keyrings terraform init
+
       - name: Terraform Plan
         working-directory: terraform
         env:
