@@ -26,8 +26,8 @@ jobs:
       - name: Instalar Terraform
         run: |
           wget -q -O terraform.zip https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_linux_amd64.zip
-          unzip terraform.zip
-          sudo mv terraform /usr/local/bin/
+          unzip -o terraform.zip
+          sudo mv -f terraform /usr/local/bin/
           terraform --version
 
       - name: Criar arquivo de credenciais
