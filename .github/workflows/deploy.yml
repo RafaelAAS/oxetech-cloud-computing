@@ -48,6 +48,12 @@ jobs:
           echo "${{ secrets.VM_SSH_KEY }}" > nordmart_key
           chmod 600 nordmart_key
           ssh-keygen -y -f nordmart_key > nordmart_key.pub
+      
+      - name: Atualizar chave GPG HashiCorp
+        run: |
+          sudo apt-get install -y gnupg
+          curl -fsSL https://keybase.io/hashicorp/pgp_keys.asc | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
 
       - name: Terraform Init
         working-directory: terraform
