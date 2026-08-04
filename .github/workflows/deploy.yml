@@ -48,15 +48,6 @@ jobs:
           echo "${{ secrets.VM_SSH_KEY }}" > nordmart_key
           chmod 600 nordmart_key
           ssh-keygen -y -f nordmart_key > nordmart_key.pub
-      
-      - name: Instalar provider azurerm manualmente
-        run: |
-          PROVIDER_VERSION="3.116.0"
-          PROVIDER_DIR="terraform/.terraform/providers/registry.terraform.io/hashicorp/azurerm/${PROVIDER_VERSION}/linux_amd64"
-          mkdir -p "$PROVIDER_DIR"
-          wget -q -O /tmp/provider.zip "https://releases.hashicorp.com/terraform-provider-azurerm/${PROVIDER_VERSION}/terraform-provider-azurerm_${PROVIDER_VERSION}_linux_amd64.zip"
-          unzip -o /tmp/provider.zip -d "$PROVIDER_DIR"
-          chmod +x "$PROVIDER_DIR"/terraform-provider-azurerm_*
 
       - name: Terraform Init
         working-directory: terraform
@@ -65,7 +56,19 @@ jobs:
           ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
           ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: terraform init -upgrade -plugin-dir=".terraform/providers"
+        run: |
+          cat > ~/.terraformrc << 'EOF'
+          disable_checkpoint = true
+          provider_installation {
+            network_mirror {
+              url = "https://registry.terraform.io/"
+            }
+            direct {
+              exclude = []
+            }
+          }
+          EOF
+          terraform init -upgrade
 
       - name: Terraform Plan
         working-directory: terraform
