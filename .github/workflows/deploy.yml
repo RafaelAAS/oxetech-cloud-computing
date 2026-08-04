@@ -59,15 +59,10 @@ jobs:
         run: |
           cat > ~/.terraformrc << 'EOF'
           disable_checkpoint = true
-          provider_installation {
-            network_mirror {
-              url = "https://registry.terraform.io/"
-            }
-            direct {
-              exclude = []
-            }
-          }
           EOF
+          terraform providers lock \
+            -platform=linux_amd64 \
+            registry.terraform.io/hashicorp/azurerm || true
           terraform init -upgrade
 
       - name: Terraform Plan
