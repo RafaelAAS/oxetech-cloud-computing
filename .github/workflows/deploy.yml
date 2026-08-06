@@ -17,7 +17,6 @@ jobs:
     outputs:
       vm_a_ip: ${{ steps.outputs.outputs.vm_a_ip }}
       vm_b_ip: ${{ steps.outputs.outputs.vm_b_ip }}
-      db_host: ${{ steps.outputs.outputs.db_host }}
 
     steps:
       - name: Checkout código
@@ -52,9 +51,9 @@ jobs:
       - name: Terraform Init
         working-directory: terraform
         env:
-          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_CLIENT_ID:      ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:  ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:      ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           sudo apt-get install -y gnupg2
@@ -65,18 +64,18 @@ jobs:
       - name: Terraform Plan
         working-directory: terraform
         env:
-          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_CLIENT_ID:      ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:  ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:      ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform plan -out=tfplan
 
       - name: Terraform Apply
         working-directory: terraform
         env:
-          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_CLIENT_ID:      ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:  ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:      ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform apply -auto-approve tfplan
 
@@ -84,14 +83,13 @@ jobs:
         id: outputs
         working-directory: terraform
         env:
-          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_CLIENT_ID:      ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:  ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:      ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           echo "vm_a_ip=$(terraform output -raw vm_a_ip)" >> $GITHUB_OUTPUT
           echo "vm_b_ip=$(terraform output -raw vm_b_ip)" >> $GITHUB_OUTPUT
-          echo "db_host=$(terraform output -raw database_host)" >> $GITHUB_OUTPUT
 
   deploy:
     name: "Deploy Aplicação"
@@ -113,7 +111,6 @@ jobs:
       - name: Deploy na VM web-a
         env:
           VM_IP:   ${{ needs.terraform.outputs.vm_a_ip }}
-          DB_HOST: ${{ needs.terraform.outputs.db_host }}
           DB_PASS: ${{ secrets.DB_PASS }}
         run: |
           scp -i ~/.ssh/nordmart_key -o StrictHostKeyChecking=no \
@@ -121,13 +118,11 @@ jobs:
             nordadmin@$VM_IP:/tmp/
           ssh -i ~/.ssh/nordmart_key -o StrictHostKeyChecking=no \
             nordadmin@$VM_IP \
-            "export DB_HOST='$DB_HOST' DB_NAME='nordmart' DB_USER='norddbadmin' DB_PASS='$DB_PASS' && \
-             chmod +x /tmp/deploy.sh && sudo -E /tmp/deploy.sh"
+            "chmod +x /tmp/deploy.sh && sudo -E /tmp/deploy.sh"
 
       - name: Deploy na VM web-b
         env:
           VM_IP:   ${{ needs.terraform.outputs.vm_b_ip }}
-          DB_HOST: ${{ needs.terraform.outputs.db_host }}
           DB_PASS: ${{ secrets.DB_PASS }}
         run: |
           scp -i ~/.ssh/nordmart_key -o StrictHostKeyChecking=no \
@@ -135,8 +130,7 @@ jobs:
             nordadmin@$VM_IP:/tmp/
           ssh -i ~/.ssh/nordmart_key -o StrictHostKeyChecking=no \
             nordadmin@$VM_IP \
-            "export DB_HOST='$DB_HOST' DB_NAME='nordmart' DB_USER='norddbadmin' DB_PASS='$DB_PASS' && \
-             chmod +x /tmp/deploy.sh && sudo -E /tmp/deploy.sh"
+            "chmod +x /tmp/deploy.sh && sudo -E /tmp/deploy.sh"
 
       - name: Verificar aplicação
         run: |

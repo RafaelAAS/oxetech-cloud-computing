@@ -25,7 +25,7 @@ variable "tenant_id" {
 variable "location" {
   description = "Azure region"
   type        = string
-  default     = "brazilsouth"
+  default     = "westus2" 
 }
 
 variable "project" {
@@ -35,9 +35,9 @@ variable "project" {
 }
 
 variable "vm_size" {
-  description = "VM size (cheapest for trial)"
+  description = "VM size"
   type        = string
-  default     = "Standard_B1s"
+  default     = "Standard_B2ats_v2" 
 }
 
 variable "admin_username" {

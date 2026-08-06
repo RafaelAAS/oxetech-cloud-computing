@@ -22,7 +22,6 @@ resource "azurerm_virtual_network" "nordmart" {
   }
 }
 
-# Subnet pública — onde ficam as VMs
 resource "azurerm_subnet" "public" {
   name                 = "${var.project}-subnet-public"
   resource_group_name  = azurerm_resource_group.nordmart.name
@@ -30,41 +29,7 @@ resource "azurerm_subnet" "public" {
   address_prefixes     = ["10.10.1.0/24"]
 }
 
-# Subnet privada — onde fica o banco
-resource "azurerm_subnet" "private" {
-  name                 = "${var.project}-subnet-private"
-  resource_group_name  = azurerm_resource_group.nordmart.name
-  virtual_network_name = azurerm_virtual_network.nordmart.name
-  address_prefixes     = ["10.10.2.0/24"]
-
-  delegation {
-    name = "postgresql-delegation"
-    service_delegation {
-      name = "Microsoft.DBforPostgreSQL/flexibleServers"
-      actions = [
-        "Microsoft.Network/virtualNetworks/subnets/join/action"
-      ]
-    }
-  }
-}
-
-# DNS Zone privada para o banco — permite que as VMs encontrem o banco pelo nome
-resource "azurerm_private_dns_zone" "postgresql" {
-  name                = "${var.project}.postgres.database.azure.com"
-  resource_group_name = azurerm_resource_group.nordmart.name
-}
-
-resource "azurerm_private_dns_zone_virtual_network_link" "postgresql" {
-  name                  = "${var.project}-dns-link"
-  private_dns_zone_name = azurerm_private_dns_zone.postgresql.name
-  resource_group_name   = azurerm_resource_group.nordmart.name
-  virtual_network_id    = azurerm_virtual_network.nordmart.id
-  registration_enabled  = false
-}
-
 # ─── NETWORK SECURITY GROUPS ──────────────────────────────────
-
-# NSG das VMs — aceita HTTP do load balancer e SSH só do seu IP
 resource "azurerm_network_security_group" "vm" {
   name                = "${var.project}-nsg-vm"
   location            = azurerm_resource_group.nordmart.location
@@ -97,37 +62,9 @@ resource "azurerm_network_security_group" "vm" {
   tags = { project = "NordMart" }
 }
 
-# NSG do banco — aceita PostgreSQL só das VMs (subnet pública)
-resource "azurerm_network_security_group" "db" {
-  name                = "${var.project}-nsg-db"
-  location            = azurerm_resource_group.nordmart.location
-  resource_group_name = azurerm_resource_group.nordmart.name
-
-  security_rule {
-    name                       = "allow-postgresql"
-    priority                   = 100
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "5432"
-    source_address_prefix      = "10.10.1.0/24"
-    destination_address_prefix = "*"
-  }
-
-  tags = { project = "NordMart" }
-}
-
-# Associa o NSG à subnet pública
 resource "azurerm_subnet_network_security_group_association" "public" {
   subnet_id                 = azurerm_subnet.public.id
   network_security_group_id = azurerm_network_security_group.vm.id
-}
-
-# Associa o NSG à subnet privada
-resource "azurerm_subnet_network_security_group_association" "private" {
-  subnet_id                 = azurerm_subnet.private.id
-  network_security_group_id = azurerm_network_security_group.db.id
 }
 
 # ─── SSH KEY ──────────────────────────────────────────────────
@@ -145,7 +82,6 @@ resource "azurerm_public_ip" "vm_a" {
   location            = azurerm_resource_group.nordmart.location
   allocation_method   = "Static"
   sku                 = "Standard"
-  zones               = ["1"]
   tags                = { project = "NordMart" }
 }
 
@@ -163,13 +99,11 @@ resource "azurerm_network_interface" "vm_a" {
 }
 
 resource "azurerm_linux_virtual_machine" "vm_a" {
-  name                = "${var.project}-vm-a"
-  resource_group_name = azurerm_resource_group.nordmart.name
-  location            = azurerm_resource_group.nordmart.location
-  size                = var.vm_size
-  admin_username      = var.admin_username
-  zone                = "1"
-
+  name                  = "${var.project}-vm-a"
+  resource_group_name   = azurerm_resource_group.nordmart.name
+  location              = azurerm_resource_group.nordmart.location
+  size                  = var.vm_size
+  admin_username        = var.admin_username
   network_interface_ids = [azurerm_network_interface.vm_a.id]
 
   admin_ssh_key {
@@ -185,7 +119,7 @@ resource "azurerm_linux_virtual_machine" "vm_a" {
   source_image_reference {
     publisher = "Canonical"
     offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts-gen2"
+    sku       = "22_04-lts"
     version   = "latest"
   }
 
@@ -199,7 +133,6 @@ resource "azurerm_public_ip" "vm_b" {
   location            = azurerm_resource_group.nordmart.location
   allocation_method   = "Static"
   sku                 = "Standard"
-  zones               = ["2"]
   tags                = { project = "NordMart" }
 }
 
@@ -217,13 +150,11 @@ resource "azurerm_network_interface" "vm_b" {
 }
 
 resource "azurerm_linux_virtual_machine" "vm_b" {
-  name                = "${var.project}-vm-b"
-  resource_group_name = azurerm_resource_group.nordmart.name
-  location            = azurerm_resource_group.nordmart.location
-  size                = var.vm_size
-  admin_username      = var.admin_username
-  zone                = "2"
-
+  name                  = "${var.project}-vm-b"
+  resource_group_name   = azurerm_resource_group.nordmart.name
+  location              = azurerm_resource_group.nordmart.location
+  size                  = var.vm_size
+  admin_username        = var.admin_username
   network_interface_ids = [azurerm_network_interface.vm_b.id]
 
   admin_ssh_key {
@@ -239,7 +170,7 @@ resource "azurerm_linux_virtual_machine" "vm_b" {
   source_image_reference {
     publisher = "Canonical"
     offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts-gen2"
+    sku       = "22_04-lts"
     version   = "latest"
   }
 
@@ -306,35 +237,6 @@ resource "azurerm_network_interface_backend_address_pool_association" "vm_b" {
   backend_address_pool_id = azurerm_lb_backend_address_pool.nordmart.id
 }
 
-# ─── POSTGRESQL ───────────────────────────────────────────────
-resource "azurerm_postgresql_flexible_server" "nordmart" {
-  name                          = "${var.project}-db"
-  resource_group_name           = azurerm_resource_group.nordmart.name
-  location                      = azurerm_resource_group.nordmart.location
-  version                       = "14"
-  delegated_subnet_id           = azurerm_subnet.private.id
-  private_dns_zone_id           = azurerm_private_dns_zone.postgresql.id
-  administrator_login           = var.db_admin_username
-  administrator_password        = var.db_admin_password
-  zone                          = "1"
-  storage_mb                    = 32768
-  sku_name                      = "B_Standard_B1ms"
-  backup_retention_days         = 7
-  geo_redundant_backup_enabled  = false
-  public_network_access_enabled = false
-
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.postgresql]
-
-  tags = { project = "NordMart" }
-}
-
-resource "azurerm_postgresql_flexible_server_database" "nordmart" {
-  name      = "nordmart"
-  server_id = azurerm_postgresql_flexible_server.nordmart.id
-  collation = "en_US.utf8"
-  charset   = "utf8"
-}
-
 # ─── STORAGE ACCOUNT ──────────────────────────────────────────
 resource "azurerm_storage_account" "nordmart" {
   name                     = "${var.project}storage2024"
@@ -355,34 +257,4 @@ resource "azurerm_storage_container" "nordmart" {
   name                  = "nordmart-files"
   storage_account_name  = azurerm_storage_account.nordmart.name
   container_access_type = "private"
-}
-
-# ─── AZURE MONITOR ────────────────────────────────────────────
-resource "azurerm_monitor_action_group" "nordmart" {
-  name                = "${var.project}-action-group"
-  resource_group_name = azurerm_resource_group.nordmart.name
-  short_name          = "nordmart"
-  tags                = { project = "NordMart" }
-}
-
-resource "azurerm_monitor_metric_alert" "cpu_vm_a" {
-  name                = "${var.project}-cpu-alert-vm-a"
-  resource_group_name = azurerm_resource_group.nordmart.name
-  scopes              = [azurerm_linux_virtual_machine.vm_a.id]
-  description         = "Alerta quando CPU da VM-a passar de 80%"
-  severity            = 2
-
-  criteria {
-    metric_namespace = "Microsoft.Compute/virtualMachines"
-    metric_name      = "Percentage CPU"
-    aggregation      = "Average"
-    operator         = "GreaterThan"
-    threshold        = 80
-  }
-
-  action {
-    action_group_id = azurerm_monitor_action_group.nordmart.id
-  }
-
-  tags = { project = "NordMart" }
 }
