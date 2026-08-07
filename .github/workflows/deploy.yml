@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  TF_VERSION: "1.6.0"
+  TF_VERSION: "1.9.8"
 
 jobs:
   terraform:
@@ -24,7 +24,7 @@ jobs:
 
       - name: Instalar Terraform
         run: |
-          wget -q -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_linux_amd64.zip
+          wget -q -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip
           unzip -o /tmp/terraform.zip -d /tmp/terraform-bin
           sudo mv -f /tmp/terraform-bin/terraform /usr/local/bin/terraform
           terraform --version
@@ -55,11 +55,7 @@ jobs:
           ARM_CLIENT_SECRET:  ${{ secrets.AZURE_CLIENT_SECRET }}
           ARM_TENANT_ID:      ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: |
-          sudo apt-get install -y gnupg2
-          gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 72D7468F
-          gpg --export 72D7468F | sudo tee /usr/share/keyrings/hashicorp.gpg > /dev/null
-          GNUPGHOME=/usr/share/keyrings terraform init
+        run: terraform init
 
       - name: Terraform Plan
         working-directory: terraform
